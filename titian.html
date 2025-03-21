@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giant Hunter</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; }
+        canvas { display: block; }
+        #scoreboard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            font-size: 18px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="scoreboard">Score: 0</div>
+    <!--div id="instructions">Use arrow keys to move. Click on the giant's neck when near to eliminate it. Avoid getting caught!  <span onclick="close()"> X </span></div-->
+    <canvas id="gameCanvas"></canvas>
+    <script>
+		alert("Use arrow keys to move. \nClick on the giant's neck (yellow part) when near to eliminate it. \nAvoid getting caught!")
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        class Player {
+            constructor() {
+                this.x = 100;
+                this.y = canvas.height - 150;
+                this.width = 50;
+                this.height = 50;
+                this.speed = 1; // Slower than the giants
+                this.alive = true;
+            }
+
+            draw() {
+                ctx.fillStyle = this.alive ? "black" : "gray";
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                this.drawAttackRange();
+            }
+
+            move(dir) {
+                if (this.alive) {
+                    if (dir === "left" && this.x > 0) this.x -= this.speed;
+                    if (dir === "right" && this.x < canvas.width - this.width) this.x += this.speed;
+                    if (dir === "up" && this.y > 0) this.y -= this.speed;
+                    if (dir === "down" && this.y < canvas.height - this.height) this.y += this.speed;
+                }
+            }
+
+            drawAttackRange() {
+                ctx.strokeStyle = "blue";
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + this.height / 2, 150, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        class Giant {
+            constructor() {
+                let safeDistance = 600;
+                do {
+                    this.x = Math.random() * (canvas.width - 100);
+                    this.y = Math.random() * (canvas.height - 120);
+                } while (Math.abs(this.x - 100) < safeDistance && Math.abs(this.y - (canvas.height - 150)) < safeDistance);
+                
+                this.width = 80;
+                this.height = 100;
+                this.neckX = this.x + 30;
+                this.neckY = this.y;
+                this.neckWidth = 20;
+                this.neckHeight = 10;
+                this.speed = 1.5; // Faster than player
+            }
+
+            draw() {
+                ctx.fillStyle = "red";
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                ctx.fillStyle = "yellow";
+                ctx.fillRect(this.neckX, this.neckY, this.neckWidth, this.neckHeight);
+            }
+
+            moveToward(player) {
+                if (this.x < player.x) this.x += this.speed;
+                else if (this.x > player.x) this.x -= this.speed;
+                
+                if (this.y < player.y) this.y += this.speed;
+                else if (this.y > player.y) this.y -= this.speed;
+                
+                this.neckX = this.x + 30;
+                this.neckY = this.y;
+            }
+
+            checkAttack(x, y, player) {
+                const inNeckRange = x >= this.neckX && x <= this.neckX + this.neckWidth && y >= this.neckY && y <= this.neckY + this.neckHeight;
+                const closeEnough = Math.hypot(player.x - this.x, player.y - this.y) < 100;
+                return inNeckRange && closeEnough;
+            }
+        }
+
+        let player = new Player();
+        let giants = [new Giant(), new Giant()];
+        let score = 0;
+
+        function updateScore() {
+            document.getElementById("scoreboard").innerText = "Score: " + score;
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (player.alive) {
+                player.draw();
+                giants.forEach(giant => {
+                    giant.moveToward(player);
+                    giant.draw();
+                    if (Math.hypot(player.x - giant.x, player.y - giant.y) < 50) {
+                        player.alive = false; 
+                    }
+                });
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft") player.move("left");
+            if (e.key === "ArrowRight") player.move("right");
+            if (e.key === "ArrowUp") player.move("up");
+            if (e.key === "ArrowDown") player.move("down");
+        });
+
+        canvas.addEventListener("click", (e) => {
+            if (!player.alive) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            giants = giants.filter(giant => {
+                if (giant.checkAttack(clickX, clickY, player)) {
+                    score++;
+                    updateScore();
+                    return false; // Giant dies
+                } else if (Math.hypot(player.x - giant.x, player.y - giant.y) < 100) {
+                    player.alive = false; // Only die if close and clicked wrong
+                    return true;
+                }
+                return true;
+            });
+            
+            while (giants.length < 2) {
+                giants.push(new Giant());
+            }
+        });
+
+		function close(){
+			document.getElementById("instructions").style.display = "none"
+		}
+		
+		setTimeout(() => document.getElementById("instructions").style.display = "none", 5000);
+  
+        gameLoop();
+    </script>
+</body>
+</html>
